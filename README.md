@@ -1,2 +1,2 @@
 # COVID-19-Statistics
-Compile COVID-19 data for further analysis
+Obtain COVID-19 data from https://www.worldometers.info/coronavirus/ for further analysis
