@@ -1,0 +1,127 @@
+import pandas as pd
+import numpy as np
+import requests
+from bs4 import BeautifulSoup
+
+
+def countryName(row):
+    try:
+        name = row.find('a', {'class': 'mt_a'}).get_text()
+    except:
+        name = row.find('span', {'style': 'color:#00B5F0; font-style:italic; '}).text
+    countries.append(name)
+
+
+def countryCase(row):
+    try:
+        cases = row.findAll('td', {'style': 'font-weight: bold; text-align:right'})[0].get_text()
+        cases = int(cases.replace(',', ''))
+    except:
+        cases = 'NaN'
+    total_cases_list.append(cases)
+
+
+def countryDeaths(row):
+    try:
+        deaths = row.findAll('td', {'style': 'font-weight: bold; text-align:right;'})[1].get_text()
+        deaths = int(deaths.replace(',', ''))
+    except:
+        try:
+            deaths = row.findAll('td', {'style': 'font-weight: bold; text-align:right;'})[0].get_text()
+            deaths = int(deaths.replace(',', ''))
+        except:
+            deaths = 'NaN'
+    deaths_list.append(deaths)
+
+
+def countryRecovered(row):
+    try:
+        recovered = row.findAll('td', {'style': 'font-weight: bold; text-align:right'})[1].get_text()
+        recovered = int(recovered.replace(',', ''))
+    except:
+        recovered = 'NaN'
+    recovered_list.append(recovered)
+
+
+def countryActive(row):
+    try:
+        active = row.findAll('td', {'style': 'text-align:right;font-weight:bold;'})[0].get_text()
+        active = int(active.replace(',', ''))
+    except:
+        active = 'NaN'
+    active_cases_list.append(active)
+
+
+# Obtain Web Page
+page = requests.get('https://www.worldometers.info/coronavirus/')
+soup = BeautifulSoup(page.content, 'html.parser')
+
+# WebScraping for World Covid-19 Statistics
+overall_info = soup.find(class_='content-inner')
+items = overall_info.find_all(class_='maincounter-number')
+items2 = overall_info.find_all(class_='number-table-main')
+total_list = []
+for item in items:
+    total_list.append(item.get_text().strip())
+for item2 in items2:
+    total_list.append(item2.get_text())
+
+# Create DataFrame from obtained statistics
+worldDF = pd.DataFrame({'World': total_list},
+                       index=['Total Cases', 'Total Deaths', 'Total Recovered', 'Active Cases', 'Closed Cases'])
+worldDF = worldDF.swapaxes('index', 'columns')
+
+# Obtain Data for each country
+table = soup.find('table', {'id': 'main_table_countries_today'})
+rows = table.findAll('tr', {'style': ''})
+del rows[:2]
+del rows[-1]
+rows2 = table.findAll('tr', {'style': 'background-color:#EAF7D5'})
+rows3 = table.findAll('tr', {'style': 'background-color:#F0F0F0'})
+rows += rows2 + rows3
+
+countries = []
+total_cases_list = []
+deaths_list = []
+recovered_list = []
+active_cases_list = []
+closed_cases_list = []
+
+for row in rows:
+    countryName(row)
+    countryCase(row)
+    countryDeaths(row)
+    countryRecovered(row)
+    countryActive(row)
+
+# Create DataFrame containing data of each country
+df = pd.DataFrame(
+    {
+        'Country': countries,
+        'Total Cases': total_cases_list,
+        'Total Deaths': deaths_list,
+        'Total Recovered': recovered_list,
+        'Active Cases': active_cases_list,
+    })
+
+# Convert all Nonnumeric values to 0
+cols = ['Total Cases', 'Total Deaths', 'Total Recovered', 'Active Cases']
+df[cols] = df[cols].apply(pd.to_numeric, errors='coerce', axis=1)
+df = df.replace(np.nan, 0, regex=True)
+
+# Create 'Closed Cases' column with given data
+df['Closed Cases'] = df['Total Cases'] - df['Active Cases']
+
+# Sort table based on 'Total Cases' in descending order
+df = df.sort_values(['Total Cases'], ascending=False)
+df = df.reset_index(drop=True)
+
+# Combine World Statistics DataFrame with Country Statistics DataFrame
+covid19 = pd.concat([worldDF, df], axis=0)
+# Rearrange columns so 'Country' is the first column
+c19_cols = covid19.columns.tolist()
+c19_cols = c19_cols[-1:] + c19_cols[:-1]
+covid19 = covid19[c19_cols]
+
+# Create CSV File
+covid19.to_csv('Covid19_Statistics.csv')
